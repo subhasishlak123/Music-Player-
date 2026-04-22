@@ -19,7 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh // Using Refresh as a fallback for Shuffle if library is limited
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,8 +51,8 @@ class MainActivity : ComponentActivity() {
             val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
                 Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
 
-            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                if (isGranted) songList = fetchAndAnalyzeSongs(context) else songList = emptyList()
+            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { 
+                if (it) songList = fetchAndAnalyzeSongs(context) else songList = emptyList()
             }
 
             LaunchedEffect(Unit) { launcher.launch(permission) }
@@ -62,10 +62,6 @@ class MainActivity : ComponentActivity() {
                     if (songList == null) {
                         Box(contentAlignment = Alignment.Center) { 
                             CircularProgressIndicator(color = Color(0xFF1DB954)) 
-                        }
-                    } else if (songList!!.isEmpty()) {
-                        Box(contentAlignment = Alignment.Center) { 
-                            Text("No music found. Check permissions.", color = Color.Gray) 
                         }
                     } else {
                         ModernPlayerUI(songList!!, player!!)
@@ -98,9 +94,9 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
     )) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             Spacer(modifier = Modifier.height(48.dp))
-            Text("Your Library", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Spotify AI", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             
-            // Mood Filter
+            // Mood Filters
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 16.dp)) {
                 Mood.values().forEach { mood ->
                     FilterChip(
@@ -110,7 +106,6 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
                         modifier = Modifier.padding(end = 8.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFF1DB954),
-                            selectedLabelColor = Color.Black,
                             containerColor = Color(0xFF282828),
                             labelColor = Color.White
                         )
@@ -118,16 +113,9 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
                 }
             }
 
-            // Shuffle Toggle
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                IconButton(onClick = { isShuffle = !isShuffle }) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh, 
-                        contentDescription = "Shuffle",
-                        tint = if (isShuffle) Color(0xFF1DB954) else Color.Gray
-                    )
-                }
-                Text("Shuffle Mode: ${if(isShuffle) "ON" else "OFF"}", color = Color.Gray, fontSize = 12.sp)
+            // Shuffle Button
+            IconButton(onClick = { isShuffle = !isShuffle }) {
+                Icon(Icons.Default.Shuffle, null, tint = if (isShuffle) Color(0xFF1DB954) else Color.White)
             }
 
             LazyColumn(modifier = Modifier.weight(1f)) {
@@ -139,34 +127,29 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
                             player.prepare()
                             player.play()
                             isPlaying = true
-                        }.padding(vertical = 10.dp),
+                        }.padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFF282828))) {
-                            Icon(Icons.Default.MusicNote, null, Modifier.align(Alignment.Center), tint = if(currentSong == song) Color(0xFF1DB954) else Color.Gray)
+                            Icon(Icons.Default.MusicNote, null, Modifier.align(Alignment.Center), tint = Color.Gray)
                         }
                         Column(Modifier.padding(start = 16.dp)) {
                             Text(song.title, color = if(currentSong == song) Color(0xFF1DB954) else Color.White, fontSize = 15.sp, maxLines = 1)
-                            Text("Local Audio • ${song.mood}", color = Color.Gray, fontSize = 12.sp)
+                            Text(song.mood.name, color = Color.Gray, fontSize = 12.sp)
                         }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(100.dp))
         }
 
-        // Mini Player
+        // Floating Bottom Bar
         currentSong?.let { song ->
             Card(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().height(64.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF282828)),
-                shape = RoundedCornerShape(8.dp)
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF282828))
             ) {
                 Row(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(song.title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(song.mood.name, color = Color(0xFF1DB954), fontSize = 11.sp)
-                    }
+                    Text(song.title, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     IconButton(onClick = {
                         if (player.isPlaying) player.pause() else player.play()
                         isPlaying = player.isPlaying
@@ -190,8 +173,8 @@ fun fetchAndAnalyzeSongs(context: Context): List<Song> {
             val title = cursor.getString(titleIdx)
             val contentUri = Uri.withAppendedPath(uri, cursor.getLong(idIdx).toString())
             val mood = when {
-                title.contains("remix", true) || title.contains("bass", true) -> Mood.ENERGETIC
-                title.contains("hoon", true) || title.contains("ki", true) -> Mood.BOLLYWOOD
+                title.contains("remix", true) -> Mood.ENERGETIC
+                title.contains("hoon", true) -> Mood.BOLLYWOOD
                 else -> Mood.CHILL
             }
             list.add(Song(title, contentUri, mood))
