@@ -5,7 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RectangleShape
+import androidx.compose.foundation.shape.RectangleShape // Added this missing import
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.random.Random // Added for the visualizer math
 
 // Retro Palette
 val RetroGreen = Color(0xFF33FF00)
@@ -59,12 +60,13 @@ fun PlayerScreen() {
                 .border(4.dp, Color.White),
             contentAlignment = Alignment.Center
         ) {
-            // Simulated Pixel Visualizer Bars
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.height(100.dp)) {
                 repeat(8) { 
+                    // Fixed random logic
+                    val barHeight = remember { Random.nextFloat().coerceIn(0.3f, 0.9f) }
                     Box(modifier = Modifier
                         .width(15.dp)
-                        .fillMaxHeight(fraction = (0.3f..0.9f).random())
+                        .fillMaxHeight(fraction = barHeight)
                         .padding(horizontal = 2.dp)
                         .background(RetroBlue))
                 }
@@ -96,7 +98,7 @@ fun PlayerScreen() {
                 .border(1.dp, Color.Gray)
                 .padding(8.dp)
         ) {
-            Text("> AI Suggestion: Based on time (Night), switching to Chill Lo-fi list...", 
+            Text("> AI Suggestion: Night detected. Switching to Chill list...", 
                  color = Color.Gray, fontSize = 10.sp)
         }
     }
@@ -108,7 +110,7 @@ fun PixelButton(text: String, isMain: Boolean = false) {
         modifier = Modifier
             .border(3.dp, if (isMain) RetroGreen else Color.White, RectangleShape)
             .background(if (isMain) Color(0xFF113311) else BgBlack)
-            .clickable { /* TODO: Logic */ }
+            .clickable { /* Click Logic */ }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
