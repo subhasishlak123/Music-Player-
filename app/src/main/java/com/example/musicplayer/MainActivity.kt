@@ -1,9 +1,15 @@
 package com.example.musicplayer
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.content.ComponentName
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -11,110 +17,97 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.random.Random
-
-// Retro Palette
-val RetroGreen = Color(0xFF33FF00)
-val RetroBlue = Color(0xFF00CCFF)
-val BgBlack = Color(0xFF0A0A0A)
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            PixelPlayerTheme {
-                PlayerScreen()
+            val context = LocalContext.current
+            var hasPermission by remember { mutableStateOf(checkPermission(context)) }
+            var songList by remember { mutableStateOf(listOf<String>()) }
+
+            // Permission Launcher
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { isGranted -> hasPermission = isGranted }
+
+            LaunchedEffect(hasPermission) {
+                if (hasPermission) {
+                    songList = fetchSongs(context)
+                } else {
+                    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
+                        Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+                    launcher.launch(permission)
+                }
             }
-        }
-    }
-}
 
-@Composable
-fun PlayerScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BgBlack)
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        // --- TOP BAR ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(2.dp, RetroGreen)
-                .padding(8.dp)
-        ) {
-            Text("SYSTEM: READY // AI: ONLINE", color = RetroGreen, fontSize = 10.sp)
-        }
-
-        // --- VISUALIZER AREA ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .border(4.dp, Color.White),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.height(100.dp)) {
-                repeat(8) { 
-                    val barHeight = remember { Random.nextFloat().coerceIn(0.3f, 0.9f) }
-                    Box(modifier = Modifier
-                        .width(15.dp)
-                        .fillMaxHeight(fraction = barHeight)
-                        .padding(horizontal = 2.dp)
-                        .background(RetroBlue))
+            PixelPlayerTheme {
+                if (hasPermission) {
+                    PlayerScreen(songList)
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("PERMISSION REQUIRED TO PLAY MUSIC", color = Color.Red)
+                    }
                 }
             }
         }
-
-        // --- SONG INFO ---
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("PIXEL_BEATS.MP3", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("MODE: HI-QUALITY // STATUS: PLAYING", color = RetroGreen, fontSize = 12.sp)
-        }
-
-        // --- CONTROLS ---
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            PixelButton("PREV")
-            PixelButton("PLAY", isMain = true)
-            PixelButton("NEXT")
-        }
-
-        // --- AI STATUS ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-                .background(Color(0xFF1A1A1A))
-                .border(1.dp, Color.Gray)
-                .padding(8.dp)
-        ) {
-            Text("> AI: Calibrating pixel response times...", 
-                 color = Color.Gray, fontSize = 10.sp)
-        }
     }
 }
 
+// Function to scan your phone for audio files
+fun fetchSongs(context: Context): List<String> {
+    val list = mutableListOf<String>()
+    val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+    val projection = arrayOf(MediaStore.Audio.Media.TITLE)
+    
+    context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+        val titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+        while (cursor.moveToNext()) {
+            list.add(cursor.getString(titleIndex))
+        }
+    }
+    return if (list.isEmpty()) listOf("No Music Found") else list
+}
+
+fun checkPermission(context: Context): Boolean {
+    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
+        Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+    return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+}
+
 @Composable
-fun PixelButton(text: String, isMain: Boolean = false) {
-    Box(
-        modifier = Modifier
-            // Using the full path here fixes the "Unresolved Reference" for good
-            .border(3.dp, if (isMain) RetroGreen else Color.White, androidx.compose.ui.graphics.RectangleShape)
-            .background(if (isMain) Color(0xFF113311) else BgBlack)
-            .clickable { /* Audio Logic */ }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
+fun PlayerScreen(songs: List<String>) {
+    var currentSongIndex by remember { mutableIntStateOf(0) }
+    
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color.Black).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text, color = if (isMain) RetroGreen else Color.White, fontSize = 14.sp)
+        Text("SYSTEM: ONLINE", color = Color(0xFF33FF00), fontSize = 12.sp)
+
+        // Song Display
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = songs.getOrElse(currentSongIndex) { "SEARCHING..." },
+                color = Color.White,
+                fontSize = 22.sp
+            )
+            Text("TRACK ${currentSongIndex + 1} / ${songs.size}", color = Color.Gray)
+        }
+
+        // Controls
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Button(onClick = { if (currentSongIndex > 0) currentSongIndex-- }) { Text("PREV") }
+            Spacer(Modifier.width(10.dp))
+            Button(onClick = { /* Add ExoPlayer Start Logic */ }) { Text("PLAY") }
+            Spacer(Modifier.width(10.dp))
+            Button(onClick = { if (currentSongIndex < songs.size - 1) currentSongIndex++ }) { Text("NEXT") }
+        }
     }
 }
 
