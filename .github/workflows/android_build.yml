@@ -14,10 +14,17 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # FIX: This line gives the script permission to run
+      # STEP 1: Manually create the folder and download the missing JAR file
+      - name: Download Gradle Wrapper JAR
+        run: |
+          mkdir -p gradle/wrapper
+          curl -L https://raw.githubusercontent.com/gradle/gradle/master/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+
+      # STEP 2: Make the script executable
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # STEP 3: Build the APK
       - name: Build APK
         run: ./gradlew assembleDebug
 
