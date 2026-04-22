@@ -1,3 +1,17 @@
+
+android {
+    namespace 'com.example.musicplayer'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.musicplayer"
+        minSdk 24    // Set this to 24 (Android 7.0)
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    // ... rest of the code
+}
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
