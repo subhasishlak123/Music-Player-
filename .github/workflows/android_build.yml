@@ -1,5 +1,5 @@
 name: Build Pixel AI Player
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
@@ -13,28 +13,11 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      # STEP 1: Auto-generate the Gradle Wrapper files if they are missing
-      - name: Bootstrap Gradle Wrapper
-        run: |
-          mkdir -p gradle/wrapper
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
-          fi
-          if [ ! -f gradlew ]; then
-            curl -L https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew -o gradlew
-          fi
+      # FIX: Use the system-installed Gradle instead of the local wrapper
+      - name: Build with System Gradle
+        run: gradle assembleDebug --stacktrace
 
-      # STEP 2: Fix Linux permissions so GitHub can run the script
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # STEP 3: Run the Build (assembleDebug creates the APK)
-      - name: Build with Gradle
-        run: ./gradlew assembleDebug --stacktrace
-
-      # STEP 4: Deliver the APK as a download
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
