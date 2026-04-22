@@ -1,17 +1,18 @@
 package com.example.musicplayer
 
 import android.os.Bundle
-import android.content.ComponentName // Added
+import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RectangleShape // The missing piece
+import androidx.compose.foundation.shape.* // Force-import all shapes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape as BackupRect // Manual alias if needed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,7 +77,7 @@ fun PlayerScreen() {
         // --- SONG INFO ---
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("PIXEL_BEATS.MP3", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("MODE: HI-QUALITY // BITRATE: 320KBPS", color = RetroGreen, fontSize = 12.sp)
+            Text("MODE: HI-QUALITY // STATUS: PLAYING", color = RetroGreen, fontSize = 12.sp)
         }
 
         // --- CONTROLS ---
@@ -98,7 +99,7 @@ fun PlayerScreen() {
                 .border(1.dp, Color.Gray)
                 .padding(8.dp)
         ) {
-            Text("> AI: Optimizing audio buffer for smooth playback...", 
+            Text("> AI: Syncing audio hardware for low latency...", 
                  color = Color.Gray, fontSize = 10.sp)
         }
     }
@@ -108,7 +109,7 @@ fun PlayerScreen() {
 fun PixelButton(text: String, isMain: Boolean = false) {
     Box(
         modifier = Modifier
-            .border(3.dp, if (isMain) RetroGreen else Color.White, RectangleShape)
+            .border(3.dp, if (isMain) RetroGreen else Color.White, RectangleShape) // Uses the shape
             .background(if (isMain) Color(0xFF113311) else BgBlack)
             .clickable { /* Audio Logic */ }
             .padding(horizontal = 16.dp, vertical = 10.dp),
