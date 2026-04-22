@@ -19,12 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.delay
+import kotlin.random.Random
 
 // --- AI CORE: MOOD DEFINITIONS ---
 enum class Mood { ALL, ENERGETIC, CHILL, DARK, BOLLYWOOD }
@@ -66,7 +66,11 @@ class MainActivity : ComponentActivity() {
                     MainPlayerUI(songList, player!!)
                 } else {
                     Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFF33FF00))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color(0xFF33FF00))
+                            Spacer(Modifier.height(10.dp))
+                            Text("SCANNING DATABASE...", color = Color(0xFF33FF00), fontSize = 10.sp)
+                        }
                     }
                 }
             }
@@ -93,12 +97,11 @@ fun fetchAndAnalyzeSongs(context: Context): List<Song> {
             val title = cursor.getString(titleIdx)
             val contentUri = Uri.withAppendedPath(uri, cursor.getLong(idIdx).toString())
             
-            // Basic AI Vibe Analysis based on Title Keywords
             val mood = when {
                 title.contains("remix", true) || title.contains("bass", true) -> Mood.ENERGETIC
                 title.contains("lofi", true) || title.contains("slowed", true) -> Mood.CHILL
                 title.contains("sad", true) || title.contains("dark", true) -> Mood.DARK
-                title.contains("ki", true) || title.contains("hoon", true) -> Mood.BOLLYWOOD
+                title.contains("ki", true) || title.contains("hoon", true) || title.contains("gaana", true) -> Mood.BOLLYWOOD
                 else -> Mood.CHILL
             }
             list.add(Song(title, contentUri, mood))
@@ -118,7 +121,7 @@ fun MainPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("PIXEL AI ENGINE // ONLINE", color = Color(0xFF33FF00), fontSize = 10.sp)
+        Text("PIXEL AI ENGINE // V2.0", color = Color(0xFF33FF00), fontSize = 10.sp)
         
         // --- MOOD SELECTOR ---
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
@@ -161,8 +164,7 @@ fun MainPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
         currentSong?.let { song ->
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color(0xFF1A1A1A)).padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(song.title, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
                 Button(onClick = { 
@@ -178,18 +180,32 @@ fun MainPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
 
 @Composable
 fun Visualizer(playing: Boolean) {
-    var heights by remember { mutableStateOf(List(15) { 0.2f }) }
+    var heights by remember { mutableStateOf(List(15) { 0.1f }) }
+
     LaunchedEffect(playing) {
-        while (playing) {
-            heights = List(15) { (0.2f..1f).random() }
-            delay(100)
+        if (playing) {
+            while (true) {
+                heights = List(15) { Random.nextFloat().coerceIn(0.2f, 1.0f) }
+                delay(100)
+            }
+        } else {
+            heights = List(15) { 0.1f }
         }
-        heights = List(15) { 0.1f }
     }
-    Row(Modifier.fillMaxWidth().height(80.dp).padding(vertical = 10.dp), 
-        verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth().height(80.dp).padding(vertical = 10.dp), 
+        verticalAlignment = Alignment.Bottom, 
+        horizontalArrangement = Arrangement.Center
+    ) {
         heights.forEach { h ->
-            Box(Modifier.width(6.dp).fillMaxHeight(h).padding(horizontal = 1.dp).background(Color(0xFF00CCFF)))
+            Box(
+                modifier = Modifier
+                    .width(6.dp)
+                    .fillMaxHeight(h)
+                    .padding(horizontal = 1.dp)
+                    .background(if (playing) Color(0xFF00CCFF) else Color.DarkGray)
+            )
         }
     }
 }
