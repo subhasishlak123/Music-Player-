@@ -32,11 +32,11 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 
+// --- Data Models ---
 enum class Mood { ALL, ENERGETIC, CHILL, DARK, BOLLYWOOD }
 data class Song(val title: String, val uri: Uri, val mood: Mood)
 
 class MainActivity : ComponentActivity() {
-    // Moved to nullable to prevent crash during initialization
     private var player: ExoPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             var songList by remember { mutableStateOf<List<Song>?>(null) }
             
-            // Create player safely
+            // Initialize Player safely within the Compose lifecycle
             DisposableEffect(Unit) {
                 player = ExoPlayer.Builder(context).build()
                 onDispose {
@@ -58,17 +58,24 @@ class MainActivity : ComponentActivity() {
             val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) 
                 Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
 
-            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { 
-                if (it) songList = fetchAndAnalyzeSongs(context) else songList = emptyList()
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { isGranted ->
+                if (isGranted) songList = fetchAndAnalyzeSongs(context) else songList = emptyList()
             }
 
-            LaunchedEffect(Unit) { launcher.launch(permission) }
+            LaunchedEffect(Unit) {
+                launcher.launch(permission)
+            }
 
             MaterialTheme(colorScheme = darkColorScheme(background = Color(0xFF121212))) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     if (songList == null) {
-                        Box(contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFF1DB954)) }
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color(0xFF1DB954))
+                        }
                     } else {
+                        // Only load UI if player is ready
                         player?.let { safePlayer ->
                             ModernPlayerUI(songList!!, safePlayer)
                         }
@@ -97,8 +104,9 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
     )) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             Spacer(modifier = Modifier.height(48.dp))
-            Text("Your Library", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text("Your Music", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             
+            // Filters
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 16.dp)) {
                 Mood.values().forEach { mood ->
                     FilterChip(
@@ -110,8 +118,7 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
                             selectedContainerColor = Color(0xFF1DB954),
                             containerColor = Color(0xFF282828),
                             labelColor = Color.White
-                        ),
-                        border = null
+                        )
                     )
                 }
             }
@@ -122,7 +129,7 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
 
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(displayList, key = { it.uri.toString() }) { song ->
-                    SongRow(song, isCurrent = currentSong == song) {
+                    SongItem(song, isCurrent = currentSong == song) {
                         currentSong = song
                         player.setMediaItem(MediaItem.fromUri(song.uri))
                         player.prepare()
@@ -131,19 +138,21 @@ fun ModernPlayerUI(allSongs: List<Song>, player: ExoPlayer) {
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(80.dp))
         }
 
+        // Mini Player Bar
         currentSong?.let { song ->
-            BottomPlayerBar(song, isPlaying) {
+            MiniPlayer(song, isPlaying) {
                 if (player.isPlaying) player.pause() else player.play()
-                isPlaying = !isPlaying
+                isPlaying = player.isPlaying
             }
         }
     }
 }
 
 @Composable
-fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit) {
+fun SongItem(song: Song, isCurrent: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -159,7 +168,7 @@ fun SongRow(song: Song, isCurrent: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun BoxScope.BottomPlayerBar(song: Song, isPlaying: Boolean, onToggle: () -> Unit) {
+fun BoxScope.MiniPlayer(song: Song, isPlaying: Boolean, onToggle: () -> Unit) {
     Card(
         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().height(64.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF282828)),
@@ -178,6 +187,7 @@ fun fetchAndAnalyzeSongs(context: Context): List<Song> {
     val list = mutableListOf<Song>()
     val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
     val projection = arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media._ID)
+    
     try {
         context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
             val titleIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
@@ -189,6 +199,8 @@ fun fetchAndAnalyzeSongs(context: Context): List<Song> {
                 list.add(Song(title, contentUri, mood))
             }
         }
-    } catch (e: Exception) { e.printStackTrace() }
+    } catch (e: Exception) {
+        // Fallback for permission errors
+    }
     return list
 }
