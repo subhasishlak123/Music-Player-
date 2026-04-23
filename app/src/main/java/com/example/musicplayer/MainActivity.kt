@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 
+// Theme Colors
 val PixelGreen = Color(0xFF1DB954)
 val DarkBg = Color(0xFF0A0E0F)
 
@@ -46,21 +48,33 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             var songList by remember { mutableStateOf<List<Song>?>(null) }
             
+            // Player Lifecycle Management
             DisposableEffect(Unit) {
                 exoPlayer = ExoPlayer.Builder(context).build()
                 onDispose { exoPlayer?.release() }
             }
 
-            val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-                if (it) songList = fetchSongs(context)
-            }
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { if (it) songList = fetchSongs(context) }
 
             LaunchedEffect(Unit) {
-                launcher.launch(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE)
+                launcher.launch(
+                    if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO 
+                    else Manifest.permission.READ_EXTERNAL_STORAGE
+                )
             }
 
-            if (songList != null) {
-                PixelfyApp(songList!!, exoPlayer!!)
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                Surface(modifier = Modifier.fillMaxSize(), color = DarkBg) {
+                    if (songList != null) {
+                        PixelfyApp(songList!!, exoPlayer!!)
+                    } else {
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = PixelGreen)
+                        }
+                    }
+                }
             }
         }
     }
@@ -70,20 +84,33 @@ class MainActivity : ComponentActivity() {
 fun PixelfyApp(songs: List<Song>, player: ExoPlayer) {
     var currentSong by remember { mutableStateOf<Song?>(null) }
     var isFullScreen by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
     var isShuffle by remember { mutableStateOf(false) }
     var repeatMode by remember { mutableStateOf(Player.REPEAT_MODE_OFF) }
 
-    // Handle system back button to exit full screen
-    BackHandler(enabled = isFullScreen) {
-        isFullScreen = false
+    // Sync UI with Player State
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onShuffleModeEnabledChanged(enabled: Boolean) { isShuffle = enabled }
+            override fun onRepeatModeChanged(mode: Int) { repeatMode = mode }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
 
-    Box(Modifier.fillMaxSize().background(DarkBg)) {
-        // 1. Library View
+    BackHandler(enabled = isFullScreen) { isFullScreen = false }
+
+    Box(Modifier.fillMaxSize()) {
+        // Library Grid View
         Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Text("PIXELFY", color = PixelGreen, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("PIXELFY", color = PixelGreen, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(20.dp))
-            LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 items(songs) { song ->
                     SongTile(song) {
                         currentSong = song
@@ -95,7 +122,7 @@ fun PixelfyApp(songs: List<Song>, player: ExoPlayer) {
             }
         }
 
-        // 2. Animated Full Screen Player
+        // Animated Player Overlay
         AnimatedVisibility(
             visible = currentSong != null,
             enter = slideInVertically(initialOffsetY = { it }),
@@ -105,22 +132,14 @@ fun PixelfyApp(songs: List<Song>, player: ExoPlayer) {
                 FullScreenPlayer(
                     song = currentSong!!,
                     player = player,
+                    isPlaying = isPlaying,
                     isShuffle = isShuffle,
                     repeatMode = repeatMode,
-                    onClose = { isFullScreen = false },
-                    onShuffleToggle = {
-                        isShuffle = !isShuffle
-                        player.shuffleModeEnabled = isShuffle
-                    },
-                    onRepeatToggle = {
-                        repeatMode = if (repeatMode == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-                        player.repeatMode = repeatMode
-                    }
+                    onClose = { isFullScreen = false }
                 )
             } else {
-                // Mini Player (The Bar you circled)
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                    MiniPlayerBar(currentSong!!, player) { isFullScreen = true }
+                    MiniPlayerBar(currentSong!!, isPlaying, player) { isFullScreen = true }
                 }
             }
         }
@@ -131,71 +150,67 @@ fun PixelfyApp(songs: List<Song>, player: ExoPlayer) {
 fun FullScreenPlayer(
     song: Song, 
     player: ExoPlayer, 
+    isPlaying: Boolean,
     isShuffle: Boolean, 
     repeatMode: Int,
-    onClose: () -> Unit,
-    onShuffleToggle: () -> Unit,
-    onRepeatToggle: () -> Unit
+    onClose: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().background(DarkBg).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        Modifier.fillMaxSize().background(DarkBg).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         IconButton(onClick = onClose, Modifier.align(Alignment.Start)) {
-            Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(36.dp))
         }
         
-        // Large "Pixel" Album Art
-        Box(Modifier.size(300.dp).clip(RoundedCornerShape(12.dp)).background(Color.DarkGray)) {
-            Icon(Icons.Default.MusicNote, null, Modifier.size(100.dp).align(Alignment.Center), tint = Color.Gray)
+        Spacer(Modifier.height(40.dp))
+        Box(Modifier.size(320.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF1A1A1A))) {
+            Icon(Icons.Default.MusicNote, null, Modifier.size(120.dp).align(Alignment.Center), tint = Color.DarkGray)
         }
 
-        Spacer(Modifier.height(32.dp))
-
-        Text(song.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text("Local Audio", color = PixelGreen, fontSize = 16.sp)
+        Spacer(Modifier.height(40.dp))
+        Text(song.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text("LOCAL PIXEL AUDIO", color = PixelGreen, fontSize = 14.sp)
 
         Spacer(Modifier.weight(1f))
 
-        // Playback Controls
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            // Shuffle Button
-            IconButton(onClick = onShuffleToggle) {
+            IconButton(onClick = { player.shuffleModeEnabled = !isShuffle }) {
                 Icon(Icons.Default.Shuffle, null, tint = if (isShuffle) PixelGreen else Color.White)
             }
-            
             IconButton(onClick = { player.seekToPrevious() }) {
                 Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(48.dp))
             }
-            
-            IconButton(onClick = { if(player.isPlaying) player.pause() else player.play() }) {
-                Icon(if(player.isPlaying) Icons.Default.PauseCircleFilled else Icons.Default.PlayCircleFilled, null, tint = PixelGreen, modifier = Modifier.size(80.dp))
+            IconButton(onClick = { if (player.isPlaying) player.pause() else player.play() }) {
+                Icon(if (isPlaying) Icons.Default.PauseCircleFilled else Icons.Default.PlayCircleFilled, null, tint = PixelGreen, modifier = Modifier.size(80.dp))
             }
-
             IconButton(onClick = { player.seekToNext() }) {
                 Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(48.dp))
             }
-
-            // Auto-play (Repeat) Button
-            IconButton(onClick = onRepeatToggle) {
+            IconButton(onClick = { 
+                player.repeatMode = if (repeatMode == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF 
+            }) {
                 Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, null, tint = if (repeatMode != Player.REPEAT_MODE_OFF) PixelGreen else Color.White)
             }
         }
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(60.dp))
     }
 }
 
 @Composable
-fun MiniPlayerBar(song: Song, player: ExoPlayer, onClick: () -> Unit) {
+fun MiniPlayerBar(song: Song, isPlaying: Boolean, player: ExoPlayer, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(70.dp).background(PixelGreen).clickable { onClick() }.padding(horizontal = 16.dp),
+        Modifier.fillMaxWidth().height(75.dp).background(PixelGreen).clickable { onClick() }.padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(45.dp).background(Color.Black))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(song.title, color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("Playing Now", color = Color.Black.copy(0.7f), fontSize = 11.sp)
+            Text("TAP FOR FULL PLAYER", color = Color.Black.copy(0.7f), fontSize = 10.sp)
         }
-        IconButton(onClick = { if(player.isPlaying) player.pause() else player.play() }) {
-            Icon(if(player.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.Black)
+        IconButton(onClick = { if (player.isPlaying) player.pause() else player.play() }) {
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.Black)
         }
     }
 }
