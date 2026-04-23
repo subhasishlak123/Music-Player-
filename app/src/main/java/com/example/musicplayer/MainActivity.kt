@@ -14,13 +14,20 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 
 class MainActivity : ComponentActivity() {
@@ -33,6 +40,7 @@ class MainActivity : ComponentActivity() {
             var songList by remember { mutableStateOf<List<Song>?>(null) }
             var permissionGranted by remember { mutableStateOf(false) }
             
+            // Safe initialization of Player
             DisposableEffect(Unit) {
                 exoPlayer = ExoPlayer.Builder(context).build()
                 onDispose {
@@ -64,16 +72,13 @@ class MainActivity : ComponentActivity() {
                         }
                         songList == null -> {
                             Box(contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = Color.Green)
-                            }
-                        }
-                        songList!!.isEmpty() -> {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("No Music Found (Check storage)", color = Color.Gray)
+                                CircularProgressIndicator(color = Color(0xFF1DB954))
                             }
                         }
                         else -> {
-                            MusicListScreen(songList!!)
+                            exoPlayer?.let { player ->
+                                MusicScreen(songList!!, player)
+                            }
                         }
                     }
                 }
@@ -83,16 +88,95 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MusicListScreen(songs: List<Song>) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        items(songs) { song ->
+fun MusicScreen(songs: List<Song>, player: ExoPlayer) {
+    var currentSong by remember { mutableStateOf<Song?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+
+    // Synchronize UI state with Player state
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Text(
-                text = song.title,
+                "Your Library", 
+                style = MaterialTheme.typography.headlineMedium, 
                 color = Color.White,
-                modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth()
+                modifier = Modifier.padding(bottom = 16.dp)
             )
-            // FIXED: Using a manual Divider to avoid "Unresolved reference"
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
+            
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(songs) { song ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                currentSong = song
+                                val mediaItem = MediaItem.fromUri(song.uri)
+                                player.setMediaItem(mediaItem)
+                                player.prepare()
+                                player.play()
+                            }
+                            .padding(vertical = 12.dp)
+                    ) {
+                        Text(
+                            text = song.title,
+                            color = if (currentSong == song) Color(0xFF1DB954) else Color.White,
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color.DarkGray))
+                }
+            }
+            // Space for the bottom bar
+            if (currentSong != null) Spacer(modifier = Modifier.height(80.dp))
+        }
+
+        // --- PLAYBACK CONTROL BAR ---
+        currentSong?.let { song ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFF282828)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            song.title, 
+                            color = Color.White, 
+                            maxLines = 1, 
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 14.sp
+                        )
+                        Text("Local Audio", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    
+                    IconButton(onClick = {
+                        if (player.isPlaying) player.pause() else player.play()
+                    }) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Play/Pause",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -101,30 +185,22 @@ data class Song(val title: String, val uri: Uri)
 
 fun fetchSongs(context: Context): List<Song> {
     val list = mutableListOf<Song>()
-    val projection = arrayOf(
-        MediaStore.Audio.Media.TITLE, 
-        MediaStore.Audio.Media._ID,
-        MediaStore.Audio.Media.DURATION
-    )
+    val projection = arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DURATION)
     val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
     
     try {
-        // Only fetch files longer than 5 seconds to avoid UI clutter
         context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
             val tIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val iIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val dIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             
             while (cursor.moveToNext()) {
-                val duration = cursor.getLong(dIdx)
-                if (duration > 5000) { 
+                if (cursor.getLong(dIdx) > 5000) { 
                     val songUri = Uri.withAppendedPath(uri, cursor.getLong(iIdx).toString())
                     list.add(Song(cursor.getString(tIdx), songUri))
                 }
             }
         }
-    } catch (e: Exception) {
-        e.printStackTrace()
-    }
+    } catch (e: Exception) { e.printStackTrace() }
     return list
 }
