@@ -33,7 +33,6 @@ class MainActivity : ComponentActivity() {
             var songList by remember { mutableStateOf<List<Song>?>(null) }
             var permissionGranted by remember { mutableStateOf(false) }
             
-            // Safe initialization
             DisposableEffect(Unit) {
                 exoPlayer = ExoPlayer.Builder(context).build()
                 onDispose {
@@ -42,14 +41,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Permission Launcher
             val launcher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission()
             ) { isGranted ->
                 permissionGranted = isGranted
-                if (isGranted) {
-                    songList = fetchSongs(context)
-                }
+                if (isGranted) { songList = fetchSongs(context) }
             }
 
             LaunchedEffect(Unit) {
@@ -73,11 +69,10 @@ class MainActivity : ComponentActivity() {
                         }
                         songList!!.isEmpty() -> {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("No Music Found on Device", color = Color.Gray)
+                                Text("No Music Found (Check storage)", color = Color.Gray)
                             }
                         }
                         else -> {
-                            // Only show this if we actually have songs
                             MusicListScreen(songList!!)
                         }
                     }
@@ -96,7 +91,8 @@ fun MusicListScreen(songs: List<Song>) {
                 color = Color.White,
                 modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth()
             )
-            HorizontalDivider(color = Color.DarkGray)
+            // FIXED: Using a manual Divider to avoid "Unresolved reference"
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.DarkGray))
         }
     }
 }
@@ -105,16 +101,26 @@ data class Song(val title: String, val uri: Uri)
 
 fun fetchSongs(context: Context): List<Song> {
     val list = mutableListOf<Song>()
-    val projection = arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media._ID)
+    val projection = arrayOf(
+        MediaStore.Audio.Media.TITLE, 
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.DURATION
+    )
     val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
     
     try {
+        // Only fetch files longer than 5 seconds to avoid UI clutter
         context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
             val tIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val iIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val dIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            
             while (cursor.moveToNext()) {
-                val songUri = Uri.withAppendedPath(uri, cursor.getLong(iIdx).toString())
-                list.add(Song(cursor.getString(tIdx), songUri))
+                val duration = cursor.getLong(dIdx)
+                if (duration > 5000) { 
+                    val songUri = Uri.withAppendedPath(uri, cursor.getLong(iIdx).toString())
+                    list.add(Song(cursor.getString(tIdx), songUri))
+                }
             }
         }
     } catch (e: Exception) {
