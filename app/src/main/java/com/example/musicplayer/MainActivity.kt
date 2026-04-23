@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,10 +39,10 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 
-// Theme: Cyber Anime Glass
+// Theme: Cyber Anime Palette
 val NeonCyan = Color(0xFF00FFF0)
 val NeonPink = Color(0xFFFF007A)
-val GlassBg = Color(255, 255, 255, 10)
+val GlassBg = Color(255, 255, 255, 15)
 
 class MainActivity : ComponentActivity() {
     private var exoPlayer: ExoPlayer? = null
@@ -53,12 +54,10 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             var songList by remember { mutableStateOf<List<Song>?>(null) }
             
-            // Initialize Player and MediaSession (for Notifications & Logic)
             DisposableEffect(Unit) {
                 val player = ExoPlayer.Builder(context).build()
                 exoPlayer = player
                 mediaSession = MediaSession.Builder(context, player).build()
-                
                 onDispose {
                     mediaSession?.release()
                     exoPlayer?.release()
@@ -74,28 +73,29 @@ class MainActivity : ComponentActivity() {
             }
 
             if (songList != null) {
-                PixelfyAnimeApp(songList!!, exoPlayer!!)
+                CyberAnimeApp(songList!!, exoPlayer!!)
+            } else {
+                Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = NeonCyan)
+                }
             }
         }
     }
 }
 
 @Composable
-fun PixelfyAnimeApp(songs: List<Song>, player: ExoPlayer) {
+fun CyberAnimeApp(songs: List<Song>, player: ExoPlayer) {
     var currentSong by remember { mutableStateOf<Song?>(null) }
     var isFullScreen by remember { mutableStateOf(false) }
-    
-    // States that the UI watches
     var isPlaying by remember { mutableStateOf(false) }
-    var isShuffleActive by remember { mutableStateOf(false) }
-    var repeatModeState by remember { mutableStateOf(Player.REPEAT_MODE_OFF) }
+    var isShuffle by remember { mutableStateOf(false) }
+    var repeatMode by remember { mutableStateOf(Player.REPEAT_MODE_OFF) }
 
-    // CRITICAL: This listener connects the Player's brain to the UI's eyes
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
-            override fun onShuffleModeEnabledChanged(enabled: Boolean) { isShuffleActive = enabled }
-            override fun onRepeatModeChanged(mode: Int) { repeatModeState = mode }
+            override fun onShuffleModeEnabledChanged(enabled: Boolean) { isShuffle = enabled }
+            override fun onRepeatModeChanged(mode: Int) { repeatMode = mode }
         }
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
@@ -103,14 +103,26 @@ fun PixelfyAnimeApp(songs: List<Song>, player: ExoPlayer) {
 
     BackHandler(enabled = isFullScreen) { isFullScreen = false }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF080808))) {
-        // Library Grid
+    Box(Modifier.fillMaxSize().background(Color(0xFF0A0A0A))) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Text("PIXELFY", brush = Brush.linearGradient(listOf(NeonCyan, NeonPink)), fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(16.dp))
-            LazyVerticalGrid(columns = GridCells.Fixed(2), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Header with Gradient fix
+            Text(
+                text = "PIXELFY",
+                style = TextStyle(
+                    brush = Brush.linearGradient(listOf(NeonCyan, NeonPink)),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            )
+            Spacer(Modifier.height(20.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
                 items(songs) { song ->
-                    AnimeTile(song) {
+                    AnimeSongCard(song) {
                         currentSong = song
                         player.setMediaItem(MediaItem.fromUri(song.uri))
                         player.prepare()
@@ -120,14 +132,13 @@ fun PixelfyAnimeApp(songs: List<Song>, player: ExoPlayer) {
             }
         }
 
-        // Animated Glass Player Overlay
         currentSong?.let { song ->
             AnimatedVisibility(visible = true, enter = slideInVertically { it }) {
                 if (isFullScreen) {
-                    FullPlayer(song, player, isPlaying, isShuffleActive, repeatModeState) { isFullScreen = false }
+                    FullScreenPlayer(song, player, isPlaying, isShuffle, repeatMode) { isFullScreen = false }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                        GlassMiniBar(song, isPlaying, player) { isFullScreen = true }
+                        MiniPlayer(song, isPlaying, player) { isFullScreen = true }
                     }
                 }
             }
@@ -136,45 +147,38 @@ fun PixelfyAnimeApp(songs: List<Song>, player: ExoPlayer) {
 }
 
 @Composable
-fun FullPlayer(song: Song, player: ExoPlayer, isPlaying: Boolean, shuffle: Boolean, repeat: Int, onClose: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.9f))) {
-        Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+fun FullScreenPlayer(song: Song, player: ExoPlayer, isPlaying: Boolean, isShuffle: Boolean, repeat: Int, onClose: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black.copy(0.95f))) {
+        Column(Modifier.fillMaxSize().padding(24.dp).statusBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
             IconButton(onClick = onClose, Modifier.align(Alignment.Start)) {
-                Icon(Icons.Rounded.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(40.dp))
+                Icon(Icons.Rounded.KeyboardArrowDown, null, tint = Color.White, modifier = Modifier.size(44.dp))
             }
-            
-            Spacer(Modifier.height(20.dp))
-            
-            // Anime Glass Card
+            Spacer(Modifier.height(30.dp))
             Surface(
-                modifier = Modifier.size(320.dp).border(1.dp, NeonPink.copy(0.5f), RoundedCornerShape(32.dp)),
-                shape = RoundedCornerShape(32.dp),
+                modifier = Modifier.size(320.dp).border(1.dp, NeonCyan.copy(0.4f), RoundedCornerShape(40.dp)),
+                shape = RoundedCornerShape(40.dp),
                 color = GlassBg
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.MusicNote, null, Modifier.size(100.dp), tint = NeonCyan.copy(0.2f))
+                    Icon(Icons.Rounded.MusicNote, null, Modifier.size(120.dp), tint = NeonPink.copy(0.3f))
                 }
             }
-
             Spacer(Modifier.height(40.dp))
-            Text(song.title, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text("NOW PLAYING", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-
+            Text(song.title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("ANIME GLASS UI", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-
-            // Logic-Corrected Buttons
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { player.shuffleModeEnabled = !shuffle }) {
-                    Icon(Icons.Rounded.Shuffle, null, tint = if (shuffle) NeonCyan else Color.White)
+                IconButton(onClick = { player.shuffleModeEnabled = !isShuffle }) {
+                    Icon(Icons.Rounded.Shuffle, null, tint = if (isShuffle) NeonCyan else Color.White)
                 }
                 IconButton(onClick = { player.seekToPrevious() }) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(45.dp))
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(48.dp))
                 }
                 IconButton(onClick = { if (isPlaying) player.pause() else player.play() }) {
-                    Icon(if (isPlaying) Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled, null, tint = NeonCyan, modifier = Modifier.size(85.dp))
+                    Icon(if (isPlaying) Icons.Rounded.PauseCircleFilled else Icons.Rounded.PlayCircleFilled, null, tint = NeonCyan, modifier = Modifier.size(88.dp))
                 }
                 IconButton(onClick = { player.seekToNext() }) {
-                    Icon(Icons.Rounded.SkipNext, null, tint = Color.White, modifier = Modifier.size(45.dp))
+                    Icon(Icons.Rounded.SkipNext, null, tint = Color.White, modifier = Modifier.size(48.dp))
                 }
                 IconButton(onClick = { 
                     player.repeatMode = if (repeat == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF 
@@ -188,7 +192,7 @@ fun FullPlayer(song: Song, player: ExoPlayer, isPlaying: Boolean, shuffle: Boole
 }
 
 @Composable
-fun GlassMiniBar(song: Song, isPlaying: Boolean, player: ExoPlayer, onClick: () -> Unit) {
+fun MiniPlayer(song: Song, isPlaying: Boolean, player: ExoPlayer, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().height(80.dp).padding(8.dp).clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
@@ -199,7 +203,7 @@ fun GlassMiniBar(song: Song, isPlaying: Boolean, player: ExoPlayer, onClick: () 
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(song.title, color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text("TAP TO OPEN", color = Color.Black.copy(0.5f), fontSize = 10.sp)
+                Text("NOW PLAYING", color = Color.Black.copy(0.6f), fontSize = 10.sp)
             }
             IconButton(onClick = { if (isPlaying) player.pause() else player.play() }) {
                 Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Color.Black)
@@ -209,25 +213,27 @@ fun GlassMiniBar(song: Song, isPlaying: Boolean, player: ExoPlayer, onClick: () 
 }
 
 @Composable
-fun AnimeTile(song: Song, onClick: () -> Unit) {
+fun AnimeSongCard(song: Song, onClick: () -> Unit) {
     Column(Modifier.width(160.dp).clickable { onClick() }) {
-        Box(Modifier.aspectRatio(1f).clip(RoundedCornerShape(20.dp)).background(GlassBg).border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(20.dp))) {
-            Icon(Icons.Default.MusicNote, null, Modifier.align(Alignment.Center), tint = NeonPink.copy(0.2f))
+        Box(Modifier.aspectRatio(1f).clip(RoundedCornerShape(28.dp)).background(GlassBg).border(1.dp, NeonPink.copy(0.2f), RoundedCornerShape(28.dp))) {
+            Icon(Icons.Default.MusicNote, null, Modifier.align(Alignment.Center), tint = NeonPink.copy(0.1f))
         }
-        Text(song.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp), fontSize = 14.sp)
+        Text(song.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
     }
 }
 
 fun fetchSongs(context: Context): List<Song> {
     val list = mutableListOf<Song>()
     val projection = arrayOf(MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media._ID)
-    context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, null, null, null)?.use { cursor ->
-        val tIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-        val iIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-        while (cursor.moveToNext()) {
-            list.add(Song(cursor.getString(tIdx), Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(iIdx).toString())))
+    try {
+        context.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, null, null, null)?.use { cursor ->
+            val tIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val iIdx = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            while (cursor.moveToNext()) {
+                list.add(Song(cursor.getString(tIdx), Uri.withAppendedPath(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cursor.getLong(iIdx).toString())))
+            }
         }
-    }
+    } catch (e: Exception) {}
     return list
 }
 
